@@ -89,11 +89,11 @@ class ChaquopyRnsNode(
             val storage = File(appContext.filesDir, "rns").absolutePath
             val initRes = mod.callAttr("init_storage", storage)
             if (!initRes.pyBool("ok")) {
-                return@withContext initRes.pyStr("error") ?: "init_storage failed"
+                return@withContext initRes.failureMessage("init_storage")
             }
             val ping = mod.callAttr("ping")
             if (!ping.pyBool("ok")) {
-                return@withContext ping.pyStr("error") ?: "RNS ping failed"
+                return@withContext ping.failureMessage("RNS ping")
             }
             bridge = mod
             isPythonReady = true
@@ -331,26 +331,80 @@ class ChaquopyRnsNode(
     }
 }
 
+/**
+ * Robust Chaquopy conversions. Prefer native [PyObject.toBoolean]/[PyObject.toJava]
+ * over toString() — naive "true"/"1"/"yes" string checks previously misread Python
+ * True and caused false demo fallback with message exactly "init_storage failed".
+ */
+private fun PyObject.isPythonNone(): Boolean {
+    val s = toString()
+    return s == "None" || runCatching { type().toString() }.getOrNull()?.contains("NoneType") == true
+}
+
 private fun PyObject.pyStr(key: String): String? {
     val v = this.get(key) ?: return null
-    val s = v.toString()
-    return if (s == "None" || s.isBlank()) null else s
+    if (v.isPythonNone()) return null
+    return runCatching { v.toJava(String::class.java) }.getOrNull()?.takeIf { it.isNotBlank() }
+        ?: v.toString().takeUnless { it.isBlank() || it == "None" }
+}
+
+private fun PyObject.asKotlinBoolean(): Boolean? {
+    // Native conversion handles Python True/False correctly.
+    runCatching { toBoolean() }.getOrNull()?.let { return it }
+    runCatching { toJava(Boolean::class.javaObjectType) }.getOrNull()?.let { return it }
+    runCatching { toJava(java.lang.Boolean::class.java) }.getOrNull()?.let { return it as Boolean }
+    // Numbers: non-zero is true
+    runCatching { toDouble() }.getOrNull()?.let { return it != 0.0 }
+    runCatching { toJava(Number::class.java) }.getOrNull()?.let { return it.toDouble() != 0.0 }
+    // String / repr fallbacks
+    if (isPythonNone()) return false
+    val s = toString().trim().lowercase()
+    return when (s) {
+        "true", "1", "yes", "on" -> true
+        "false", "0", "no", "off", "none", "" -> false
+        else -> null
+    }
 }
 
 private fun PyObject.pyBool(key: String): Boolean {
     val v = this.get(key) ?: return false
-    return when (v.toString().lowercase()) {
-        "true", "1", "yes" -> true
-        else -> false
-    }
+    return v.asKotlinBoolean() ?: false
 }
 
 private fun PyObject.pyLong(key: String): Long {
     val v = this.get(key) ?: return 0L
+    if (v.isPythonNone()) return 0L
+    runCatching { v.toLong() }.getOrNull()?.let { return it }
+    runCatching { v.toJava(Long::class.javaObjectType) }.getOrNull()?.let { return it }
+    runCatching { v.toJava(Number::class.java) }.getOrNull()?.let { return it.toLong() }
     return v.toString().toLongOrNull() ?: 0L
 }
 
 private fun PyObject.pyInt(key: String): Int {
     val v = this.get(key) ?: return 0
+    if (v.isPythonNone()) return 0
+    runCatching { v.toInt() }.getOrNull()?.let { return it }
+    runCatching { v.toJava(Int::class.javaObjectType) }.getOrNull()?.let { return it }
+    runCatching { v.toJava(Number::class.java) }.getOrNull()?.let { return it.toInt() }
     return v.toString().toDoubleOrNull()?.toInt() ?: 0
+}
+
+/** Surface Python error string; if missing, dump keys/repr for Logcat diagnosis. */
+private fun PyObject.failureMessage(label: String): String {
+    val err = pyStr("error")
+    if (!err.isNullOrBlank()) return err
+    val keysDump = try {
+        val map: Map<*, *> = this
+        map.keys.joinToString(",") { it.toString() }
+    } catch (_: Throwable) {
+        "n/a"
+    }
+    val r = try {
+        repr()
+    } catch (_: Throwable) {
+        toString()
+    }
+    val dump = "keys=[$keysDump] repr=$r"
+    android.util.Log.e("ChaquopyRnsNode", "$label failed without error field: $dump")
+    return "$label failed ($dump)"
 }

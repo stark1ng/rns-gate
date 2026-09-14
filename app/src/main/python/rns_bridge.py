@@ -110,18 +110,29 @@ def init_storage(storage_dir: str) -> Dict[str, Any]:
             storage_dir = os.path.abspath(storage_dir)
             config_dir = os.path.join(storage_dir, "reticulum")
             identity_path = os.path.join(storage_dir, "identity")
-            os.makedirs(config_dir, exist_ok=True)
-            os.makedirs(os.path.join(config_dir, "storage"), exist_ok=True)
+            identity_parent = os.path.dirname(identity_path) or storage_dir
+            for d in (storage_dir, config_dir, os.path.join(config_dir, "storage"), identity_parent):
+                try:
+                    os.makedirs(d, exist_ok=True)
+                except OSError as oe:
+                    return _err(f"init_storage failed: cannot create {d}: {oe}")
+            # Sanity: dirs must be writable
+            for d in (storage_dir, config_dir):
+                if not os.path.isdir(d) or not os.access(d, os.W_OK):
+                    return _err(f"init_storage failed: not writable: {d}")
             _state["storage_dir"] = storage_dir
             _state["config_dir"] = config_dir
             _state["identity_path"] = identity_path
             # Prefer HOME under app storage so RNS relative paths stay private.
             os.environ["HOME"] = storage_dir
+            # Explicit True (not truthy int) so Chaquopy toBoolean/toJava is unambiguous.
             return _ok(
                 storage_dir=storage_dir,
                 config_dir=config_dir,
                 identity_path=identity_path,
             )
+        except OSError as e:
+            return _err(f"init_storage failed: {e}")
         except Exception as e:
             return _err(f"init_storage failed: {e}")
 
