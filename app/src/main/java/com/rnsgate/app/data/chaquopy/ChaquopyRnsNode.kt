@@ -1,6 +1,7 @@
 package com.rnsgate.app.data.chaquopy
 
 import android.content.Context
+import android.util.Log
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -28,10 +29,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 /**
  * Real Reticulum node driven through Chaquopy → rns_bridge Python module.
+ *
+ * Bridge functions return JSON strings (json.dumps). We parse with JSONObject —
+ * do not cast PyObject to Map or use PyObject.get for dict keys (attribute/get
+ * confusion caused false demo fallback when ok was True).
  */
 class ChaquopyRnsNode(
     private val appContext: Context,
@@ -87,17 +93,17 @@ class ChaquopyRnsNode(
             val py = Python.getInstance()
             val mod = py.getModule("rns_bridge")
             val storage = File(appContext.filesDir, "rns").absolutePath
-            val initRes = mod.callAttr("init_storage", storage)
-            if (!initRes.pyBool("ok")) {
+            val initRes = bridgeJson(mod, "init_storage", storage)
+            if (!initRes.optBoolean("ok", false)) {
                 return@withContext initRes.failureMessage("init_storage")
             }
-            val ping = mod.callAttr("ping")
-            if (!ping.pyBool("ok")) {
+            val ping = bridgeJson(mod, "ping")
+            if (!ping.optBoolean("ok", false)) {
                 return@withContext ping.failureMessage("RNS ping")
             }
             bridge = mod
             isPythonReady = true
-            val ver = ping.pyStr("rns_version").orEmpty()
+            val ver = ping.jsonStr("rns_version").orEmpty()
             _snapshot.update {
                 it.copy(
                     backendMode = BackendMode.RealRns,
@@ -144,10 +150,10 @@ class ChaquopyRnsNode(
             _snapshot.update { it.copy(step = ConnectStep.Interfaces) }
 
             val startRes = withContext(Dispatchers.IO) {
-                mod.callAttr("start", ep.host, ep.port, name)
+                bridgeJson(mod, "start", ep.host, ep.port, name)
             }
-            if (!startRes.pyBool("ok")) {
-                val err = startRes.pyStr("error") ?: "RNS start failed"
+            if (!startRes.optBoolean("ok", false)) {
+                val err = startRes.jsonStr("error") ?: "RNS start failed"
                 _snapshot.update {
                     it.copy(
                         connectionState = ConnectionState.Offline,
@@ -159,7 +165,7 @@ class ChaquopyRnsNode(
                 return@launch
             }
 
-            val hash = startRes.pyStr("identity_hash")
+            val hash = startRes.jsonStr("identity_hash")
             val identity = if (!hash.isNullOrBlank()) {
                 IdentityInfo(hashHex = hash, displayName = name)
             } else null
@@ -174,8 +180,8 @@ class ChaquopyRnsNode(
                         InterfaceStatus(
                             InterfaceKind.Tcp,
                             enabled = true,
-                            up = startRes.pyBool("interface_up"),
-                            detail = startRes.pyStr("interface_detail")
+                            up = startRes.optBoolean("interface_up", false),
+                            detail = startRes.jsonStr("interface_detail")
                                 ?: "${ep.host}:${ep.port}"
                         ),
                         InterfaceStatus(
@@ -196,13 +202,13 @@ class ChaquopyRnsNode(
             }
 
             withContext(Dispatchers.IO) {
-                runCatching { mod.callAttr("probe_announce", name) }
+                runCatching { bridgeJson(mod, "probe_announce", name) }
             }
             delay(300)
 
             val statusMsg = when {
-                startRes.pyBool("announce_ok") -> "RNS online"
-                else -> startRes.pyStr("last_error") ?: "RNS online"
+                startRes.optBoolean("announce_ok", false) -> "RNS online"
+                else -> startRes.jsonStr("last_error") ?: "RNS online"
             }
             _snapshot.update {
                 it.copy(
@@ -225,7 +231,7 @@ class ChaquopyRnsNode(
         pollJob = null
         val mod = bridge
         withContext(Dispatchers.IO) {
-            runCatching { mod?.callAttr("stop") }
+            runCatching { if (mod != null) bridgeJson(mod, "stop") }
         }
         RnsNodeService.stop(appContext)
         _peers.value = emptyList()
@@ -247,9 +253,9 @@ class ChaquopyRnsNode(
             disconnect()
         }
         val res = withContext(Dispatchers.IO) {
-            mod.callAttr("regenerate_identity", displayName)
+            bridgeJson(mod, "regenerate_identity", displayName)
         }
-        val hash = res.pyStr("identity_hash") ?: "error"
+        val hash = res.jsonStr("identity_hash") ?: "error"
         val info = IdentityInfo(hashHex = hash, displayName = displayName)
         lastKnownIdentity = info
         _snapshot.update { it.copy(identity = info) }
@@ -274,15 +280,15 @@ class ChaquopyRnsNode(
             while (isActive) {
                 delay(1500)
                 val st = withContext(Dispatchers.IO) {
-                    runCatching { mod.callAttr("status") }.getOrNull()
+                    runCatching { bridgeJson(mod, "status") }.getOrNull()
                 } ?: continue
-                if (!st.pyBool("ok")) continue
+                if (!st.optBoolean("ok", false)) continue
 
-                val hash = st.pyStr("identity_hash")
-                val up = st.pyBool("interface_up")
-                val detail = st.pyStr("interface_detail").orEmpty()
-                val uptime = st.pyLong("uptime_ms")
-                val peersEst = st.pyInt("peer_estimate")
+                val hash = st.jsonStr("identity_hash")
+                val up = st.optBoolean("interface_up", false)
+                val detail = st.jsonStr("interface_detail").orEmpty()
+                val uptime = st.optLong("uptime_ms", 0L)
+                val peersEst = st.optInt("peer_estimate", 0)
 
                 if (!hash.isNullOrBlank()) {
                     lastKnownIdentity = IdentityInfo(hash, displayName)
@@ -317,6 +323,8 @@ class ChaquopyRnsNode(
     }
 
     companion object {
+        private const val TAG = "ChaquopyRnsNode"
+
         private fun defaultInterfaces(up: Boolean) = listOf(
             InterfaceStatus(InterfaceKind.Tcp, enabled = true, up = up, detail = ""),
             InterfaceStatus(InterfaceKind.Auto, enabled = false, up = false, detail = ""),
@@ -332,79 +340,33 @@ class ChaquopyRnsNode(
 }
 
 /**
- * Robust Chaquopy conversions. Prefer native [PyObject.toBoolean]/[PyObject.toJava]
- * over toString() — naive "true"/"1"/"yes" string checks previously misread Python
- * True and caused false demo fallback with message exactly "init_storage failed".
+ * Call a rns_bridge function that returns a JSON string and parse it.
+ * Avoids fragile PyObject-as-Map / PyObject.get(dict key) paths.
  */
-private fun PyObject.isPythonNone(): Boolean {
-    val s = toString()
-    return s == "None" || runCatching { type().toString() }.getOrNull()?.contains("NoneType") == true
-}
-
-private fun PyObject.pyStr(key: String): String? {
-    val v = this.get(key) ?: return null
-    if (v.isPythonNone()) return null
-    return runCatching { v.toJava(String::class.java) }.getOrNull()?.takeIf { it.isNotBlank() }
-        ?: v.toString().takeUnless { it.isBlank() || it == "None" }
-}
-
-private fun PyObject.asKotlinBoolean(): Boolean? {
-    // Native conversion handles Python True/False correctly.
-    runCatching { toBoolean() }.getOrNull()?.let { return it }
-    runCatching { toJava(Boolean::class.javaObjectType) }.getOrNull()?.let { return it }
-    runCatching { toJava(java.lang.Boolean::class.java) }.getOrNull()?.let { return it as Boolean }
-    // Numbers: non-zero is true
-    runCatching { toDouble() }.getOrNull()?.let { return it != 0.0 }
-    runCatching { toJava(Number::class.java) }.getOrNull()?.let { return it.toDouble() != 0.0 }
-    // String / repr fallbacks
-    if (isPythonNone()) return false
-    val s = toString().trim().lowercase()
-    return when (s) {
-        "true", "1", "yes", "on" -> true
-        "false", "0", "no", "off", "none", "" -> false
-        else -> null
+private fun bridgeJson(mod: PyObject, attr: String, vararg args: Any?): JSONObject {
+    val raw = mod.callAttr(attr, *args)
+    val text = raw?.toString() ?: return JSONObject().put("ok", false).put("error", "$attr returned null")
+    return try {
+        JSONObject(text)
+    } catch (e: Exception) {
+        Log.e("ChaquopyRnsNode", "$attr: not valid JSON: $text", e)
+        JSONObject()
+            .put("ok", false)
+            .put("error", "$attr: invalid JSON (${e.message}): ${text.take(200)}")
     }
 }
 
-private fun PyObject.pyBool(key: String): Boolean {
-    val v = this.get(key) ?: return false
-    return v.asKotlinBoolean() ?: false
+/** JSON null → Kotlin null; blank → null. */
+private fun JSONObject.jsonStr(key: String): String? {
+    if (!has(key) || isNull(key)) return null
+    val s = optString(key, "")
+    return s.takeIf { it.isNotBlank() && it != "null" }
 }
 
-private fun PyObject.pyLong(key: String): Long {
-    val v = this.get(key) ?: return 0L
-    if (v.isPythonNone()) return 0L
-    runCatching { v.toLong() }.getOrNull()?.let { return it }
-    runCatching { v.toJava(Long::class.javaObjectType) }.getOrNull()?.let { return it }
-    runCatching { v.toJava(Number::class.java) }.getOrNull()?.let { return it.toLong() }
-    return v.toString().toLongOrNull() ?: 0L
-}
-
-private fun PyObject.pyInt(key: String): Int {
-    val v = this.get(key) ?: return 0
-    if (v.isPythonNone()) return 0
-    runCatching { v.toInt() }.getOrNull()?.let { return it }
-    runCatching { v.toJava(Int::class.javaObjectType) }.getOrNull()?.let { return it }
-    runCatching { v.toJava(Number::class.java) }.getOrNull()?.let { return it.toInt() }
-    return v.toString().toDoubleOrNull()?.toInt() ?: 0
-}
-
-/** Surface Python error string; if missing, dump keys/repr for Logcat diagnosis. */
-private fun PyObject.failureMessage(label: String): String {
-    val err = pyStr("error")
+private fun JSONObject.failureMessage(label: String): String {
+    val err = jsonStr("error")
     if (!err.isNullOrBlank()) return err
-    val keysDump = try {
-        val map: Map<*, *> = this
-        map.keys.joinToString(",") { it.toString() }
-    } catch (_: Throwable) {
-        "n/a"
-    }
-    val r = try {
-        repr()
-    } catch (_: Throwable) {
-        toString()
-    }
-    val dump = "keys=[$keysDump] repr=$r"
-    android.util.Log.e("ChaquopyRnsNode", "$label failed without error field: $dump")
+    val dump = toString()
+    Log.e("ChaquopyRnsNode", "$label failed without error field: $dump")
     return "$label failed ($dump)"
 }

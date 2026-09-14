@@ -3,10 +3,15 @@ RNS Gate — thin Python bridge around Reticulum (rnspure / RNS).
 
 Called from Kotlin via Chaquopy. Identity and config live under the app-private
 storage directory passed from Android (filesDir).
+
+All Kotlin-facing entrypoints return a JSON string (json.dumps) so Chaquopy
+does not have to map Python dicts — PyObject.get / Map casts are unreliable
+for dict values (attribute/get method confusion).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -29,22 +34,28 @@ _state: Dict[str, Any] = {
     "peer_estimate": 0,
 }
 
+
 _reticulum = None
 _identity = None
 _destination = None
 
 
-def _ok(**kwargs) -> Dict[str, Any]:
-    out = {"ok": True, "error": None}
+def _dumps(payload: Dict[str, Any]) -> str:
+    """Serialize for Kotlin: UTF-8 JSON string parsed with org.json.JSONObject."""
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _ok(**kwargs) -> str:
+    out: Dict[str, Any] = {"ok": True, "error": None}
     out.update(kwargs)
-    return out
+    return _dumps(out)
 
 
-def _err(msg: str, **kwargs) -> Dict[str, Any]:
+def _err(msg: str, **kwargs) -> str:
     _state["last_error"] = msg
-    out = {"ok": False, "error": msg}
+    out: Dict[str, Any] = {"ok": False, "error": msg}
     out.update(kwargs)
-    return out
+    return _dumps(out)
 
 
 def _write_config(config_dir: str, host: str, port: int) -> None:
@@ -103,8 +114,8 @@ def _load_or_create_identity(path: str):
     return identity
 
 
-def init_storage(storage_dir: str) -> Dict[str, Any]:
-    """Prepare directories; does not start Reticulum."""
+def init_storage(storage_dir: str) -> str:
+    """Prepare directories; does not start Reticulum. Returns JSON string."""
     with _lock:
         try:
             storage_dir = os.path.abspath(storage_dir)
@@ -125,7 +136,6 @@ def init_storage(storage_dir: str) -> Dict[str, Any]:
             _state["identity_path"] = identity_path
             # Prefer HOME under app storage so RNS relative paths stay private.
             os.environ["HOME"] = storage_dir
-            # Explicit True (not truthy int) so Chaquopy toBoolean/toJava is unambiguous.
             return _ok(
                 storage_dir=storage_dir,
                 config_dir=config_dir,
@@ -137,7 +147,7 @@ def init_storage(storage_dir: str) -> Dict[str, Any]:
             return _err(f"init_storage failed: {e}")
 
 
-def start(host: str, port: int, display_name: str = "Operator") -> Dict[str, Any]:
+def start(host: str, port: int, display_name: str = "Operator") -> str:
     """Write TCP config, start Reticulum, load identity, optional probe announce."""
     global _reticulum, _identity, _destination
     with _lock:
@@ -208,7 +218,7 @@ def start(host: str, port: int, display_name: str = "Operator") -> Dict[str, Any
             return _err(f"start failed: {e}", traceback=tb)
 
 
-def stop() -> Dict[str, Any]:
+def stop() -> str:
     """Detach interfaces and clear running flag. Does not kill the Android process."""
     global _reticulum, _identity, _destination
     with _lock:
@@ -232,7 +242,7 @@ def stop() -> Dict[str, Any]:
             return _err(f"stop failed: {e}")
 
 
-def status() -> Dict[str, Any]:
+def status() -> str:
     """Snapshot for Gate UI: identity, TCP up, rough peer/path counts."""
     with _lock:
         try:
@@ -298,7 +308,7 @@ def status() -> Dict[str, Any]:
             return _err(f"status failed: {e}")
 
 
-def regenerate_identity(display_name: Optional[str] = None) -> Dict[str, Any]:
+def regenerate_identity(display_name: Optional[str] = None) -> str:
     """Create a new identity file. Prefer calling while stopped."""
     global _identity, _destination
     with _lock:
@@ -324,7 +334,7 @@ def regenerate_identity(display_name: Optional[str] = None) -> Dict[str, Any]:
             return _err(f"regenerate_identity failed: {e}")
 
 
-def probe_announce(display_name: Optional[str] = None) -> Dict[str, Any]:
+def probe_announce(display_name: Optional[str] = None) -> str:
     """Send another announce if the node is running."""
     with _lock:
         try:
@@ -338,7 +348,7 @@ def probe_announce(display_name: Optional[str] = None) -> Dict[str, Any]:
             return _err(f"probe_announce failed: {e}")
 
 
-def ping() -> Dict[str, Any]:
+def ping() -> str:
     """Lightweight health check used by Kotlin to verify Python/RNS import."""
     try:
         import RNS  # noqa: F401
