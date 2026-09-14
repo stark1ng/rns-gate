@@ -23,6 +23,8 @@
     <string name="gate_hash_label">Identity hash</string>
     <string name="gate_uptime_label">Uptime</string>
     <string name="gate_demo_badge">Demo mode</string>
+    <string name="gate_rns_badge">RNS</string>
+    <string name="gate_status_detail">%1$s</string>
 
     <string name="chat_title">LXMF Chat</string>
     <string name="chat_empty">No conversations yet.\nConnect and send a demo message.</string>
@@ -31,29 +33,35 @@
     <string name="chat_demo_peer">Demo Peer</string>
     <string name="chat_new">New chat</string>
     <string name="chat_back">Back</string>
+    <string name="chat_demo_banner">Chat is still demo until LXMF is wired over RNS.</string>
 
     <string name="tools_title">Toolkit</string>
     <string name="tools_identity">Identity</string>
     <string name="tools_identity_show">Show identity</string>
-    <string name="tools_identity_regen">Regenerate (demo)</string>
+    <string name="tools_identity_regen">Regenerate identity</string>
     <string name="tools_peers">Peers</string>
     <string name="tools_peers_empty">No peers yet</string>
     <string name="tools_interfaces">Interfaces</string>
     <string name="tools_tcp_host">TCP host</string>
     <string name="tools_tcp_port">TCP port</string>
     <string name="tools_tcp_save">Save TCP endpoint</string>
-    <string name="tools_tcp_saved">Saved in memory / DataStore</string>
+    <string name="tools_tcp_saved">Saved in DataStore</string>
     <string name="tools_status_up">Up</string>
     <string name="tools_status_down">Down</string>
     <string name="tools_status_placeholder">Placeholder</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_display_name">Display name</string>
-    <string name="settings_display_name_hint">Your name in chat</string>
+    <string name="settings_display_name_hint">Your name in announces / chat</string>
     <string name="settings_save">Save</string>
     <string name="settings_about">About</string>
-    <string name="settings_about_body">RNS Gate is a simple Android gateway for Reticulum with VPN-like UX.\n\nThis MVP uses a demo backend. Real Reticulum integration via Chaquopy is planned.\n\nVersion %1$s · MIT License</string>
+    <string name="settings_about_body">RNS Gate is a simple Android gateway for Reticulum with VPN-like UX.\n\nConnect prefers real Reticulum via Chaquopy (rnspure). If Python/RNS fails to start, the app falls back to the demo node.\nChat remains demo until LXMF is wired.\n\nVersion %1$s · MIT License</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_note">Follows system language (English / Russian). Change language in Android settings.</string>
     <string name="settings_saved">Saved</string>
+
+    <string name="service_channel_name">RNS node</string>
+    <string name="service_channel_desc">Keeps the Reticulum node alive while connected</string>
+    <string name="service_notification_title">RNS Gate connected</string>
+    <string name="service_notification_text">Reticulum node is running</string>
 </resources>

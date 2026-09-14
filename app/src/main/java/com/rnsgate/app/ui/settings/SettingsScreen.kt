@@ -83,7 +83,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = stringResource(R.string.settings_about_body, "0.1.0-mvp"),
+                        text = stringResource(R.string.settings_about_body, "0.2.0-rns"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = RnsMuted
                     )

@@ -54,6 +54,15 @@ fun ChatScreen(vm: ChatViewModel) {
     val draft by vm.draft.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
+        Text(
+            text = stringResource(R.string.chat_demo_banner),
+            style = MaterialTheme.typography.bodySmall,
+            color = RnsMuted,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        )
         if (activeId == null) {
             TopAppBar(
                 title = { Text(stringResource(R.string.chat_title)) },

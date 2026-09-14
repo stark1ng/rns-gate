@@ -23,6 +23,8 @@
     <string name="gate_hash_label">Хэш идентичности</string>
     <string name="gate_uptime_label">Аптайм</string>
     <string name="gate_demo_badge">Демо-режим</string>
+    <string name="gate_rns_badge">RNS</string>
+    <string name="gate_status_detail">%1$s</string>
 
     <string name="chat_title">LXMF Чат</string>
     <string name="chat_empty">Пока нет диалогов.\nПодключитесь и отправьте демо-сообщение.</string>
@@ -31,29 +33,35 @@
     <string name="chat_demo_peer">Демо-пир</string>
     <string name="chat_new">Новый чат</string>
     <string name="chat_back">Назад</string>
+    <string name="chat_demo_banner">Чат пока демо, пока LXMF не подключён к RNS.</string>
 
     <string name="tools_title">Инструменты</string>
     <string name="tools_identity">Идентичность</string>
     <string name="tools_identity_show">Показать идентичность</string>
-    <string name="tools_identity_regen">Пересоздать (демо)</string>
+    <string name="tools_identity_regen">Пересоздать идентичность</string>
     <string name="tools_peers">Пиры</string>
     <string name="tools_peers_empty">Пиров пока нет</string>
     <string name="tools_interfaces">Интерфейсы</string>
     <string name="tools_tcp_host">TCP хост</string>
     <string name="tools_tcp_port">TCP порт</string>
     <string name="tools_tcp_save">Сохранить TCP endpoint</string>
-    <string name="tools_tcp_saved">Сохранено в памяти / DataStore</string>
+    <string name="tools_tcp_saved">Сохранено в DataStore</string>
     <string name="tools_status_up">Вкл</string>
     <string name="tools_status_down">Выкл</string>
     <string name="tools_status_placeholder">Заглушка</string>
 
     <string name="settings_title">Настройки</string>
     <string name="settings_display_name">Отображаемое имя</string>
-    <string name="settings_display_name_hint">Ваше имя в чате</string>
+    <string name="settings_display_name_hint">Ваше имя в анонсах / чате</string>
     <string name="settings_save">Сохранить</string>
     <string name="settings_about">О приложении</string>
-    <string name="settings_about_body">RNS Gate — простой Android-шлюз для Reticulum с UX как у VPN.\n\nЭтот MVP использует демо-бэкенд. Реальная интеграция Reticulum через Chaquopy планируется.\n\nВерсия %1$s · MIT License</string>
+    <string name="settings_about_body">RNS Gate — простой Android-шлюз для Reticulum с UX как у VPN.\n\nПодключение предпочитает реальный Reticulum через Chaquopy (rnspure). Если Python/RNS не запускается, приложение переходит на демо-узел.\nЧат остаётся демо, пока не подключён LXMF.\n\nВерсия %1$s · MIT License</string>
     <string name="settings_language">Язык</string>
     <string name="settings_language_note">Следует системному языку (английский / русский). Смените язык в настройках Android.</string>
     <string name="settings_saved">Сохранено</string>
+
+    <string name="service_channel_name">Узел RNS</string>
+    <string name="service_channel_desc">Держит узел Reticulum активным при подключении</string>
+    <string name="service_notification_title">RNS Gate подключён</string>
+    <string name="service_notification_text">Узел Reticulum работает</string>
 </resources>

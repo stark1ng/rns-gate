@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * Abstraction over LXMF messaging.
  *
- * Demo implementation: [com.rnsgate.app.data.demo.DemoLxmfMessenger].
- * TODO(real-rns): wire to LXMF over Reticulum via Chaquopy.
+ * Current: [com.rnsgate.app.data.demo.DemoLxmfMessenger].
+ * Future: Chaquopy-backed messenger using the bundled `lxmf` package over RNS.
  */
 interface LxmfMessenger {
     val conversations: StateFlow<List<Conversation>>

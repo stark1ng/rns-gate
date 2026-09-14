@@ -2,6 +2,7 @@ package com.rnsgate.app.data.demo
 
 import com.rnsgate.app.data.RnsNode
 import com.rnsgate.app.data.SettingsStore
+import com.rnsgate.app.data.model.BackendMode
 import com.rnsgate.app.data.model.ConnectStep
 import com.rnsgate.app.data.model.ConnectionState
 import com.rnsgate.app.data.model.GateSnapshot
@@ -22,19 +23,15 @@ import kotlinx.coroutines.launch
 import java.security.SecureRandom
 
 /**
- * In-memory simulated Reticulum node for the MVP.
- *
- * TODO(real-rns): Replace with Chaquopy + `rns` Python package:
- *  - start RNS.Reticulum from Application scope
- *  - map Identity / Interfaces / Transport announce into [GateSnapshot]
- *  - expose real destination hashes and link status
+ * In-memory simulated Reticulum node (fallback when Chaquopy/RNS cannot start).
+ * Preferred path: [com.rnsgate.app.data.chaquopy.ChaquopyRnsNode].
  */
 class DemoRnsNode(
     private val scope: CoroutineScope,
     private val settingsStore: SettingsStore
 ) : RnsNode {
 
-    private val _snapshot = MutableStateFlow(GateSnapshot(interfaces = defaultInterfaces(false)))
+    private val _snapshot = MutableStateFlow(GateSnapshot(interfaces = defaultInterfaces(false), backendMode = BackendMode.Demo))
     override val snapshot: StateFlow<GateSnapshot> = _snapshot.asStateFlow()
 
     private val _peers = MutableStateFlow<List<PeerInfo>>(emptyList())

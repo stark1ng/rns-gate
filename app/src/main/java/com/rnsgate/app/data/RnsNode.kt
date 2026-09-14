@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * Abstraction over a Reticulum node.
  *
- * Demo implementation: [com.rnsgate.app.data.demo.DemoRnsNode].
- * Future: Chaquopy-backed real RNS node (see TODOs in DemoRnsNode).
+ * Preferred: [com.rnsgate.app.data.chaquopy.ChaquopyRnsNode].
+ * Fallback: [com.rnsgate.app.data.demo.DemoRnsNode].
  */
 interface RnsNode {
     val snapshot: StateFlow<GateSnapshot>

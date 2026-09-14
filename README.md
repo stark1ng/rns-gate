@@ -7,49 +7,77 @@ Differentiates from Sideband by focusing on a minimal Connect → Chat → Tools
 
 ## Status
 
-MVP **0.1.0** with a **demo backend** (`DemoRnsNode`, `DemoLxmfMessenger`).  
-Real Reticulum via Chaquopy is stubbed with TODOs — see `ARCHITECTURE.md`.
+**0.2.0** — real Reticulum path via **Chaquopy** + **rnspure** (same code as `rns`, pure-Python crypto fallback).  
+If Python/RNS fails to initialize, Connect falls back to **Demo** and shows `demo fallback: …` on the Gate screen.
+
+| Layer | Real | Still demo |
+|-------|------|------------|
+| Gate Connect / Disconnect | `ChaquopyRnsNode` → `rns_bridge.py` → RNS | Fallback `DemoRnsNode` |
+| Identity (app-private files) | Yes | Demo random hash |
+| TCP Client interface | From Tools/Settings host:port | Simulated |
+| LXMF Chat | — | `DemoLxmfMessenger` (banner on Chat) |
+| RNode / Auto interfaces | Placeholder / disabled on mobile | Simulated Auto |
 
 ## Features
 
 | Screen   | What you get |
 |----------|----------------|
-| **Gate** | Big Connect/Disconnect, step infographic (Identity → Interfaces → Path/Announce → Ready), TCP/Auto chips, RNode placeholder, hash + uptime when online |
-| **Chat** | LXMF-style conversation list + thread, demo send/auto-reply |
-| **Tools**| Show/regenerate identity, peers, interface status, TCP host:port (DataStore) |
+| **Gate** | Connect/Disconnect, step infographic, TCP chip, identity hash + uptime, RNS vs Demo badge |
+| **Chat** | LXMF-style UI (demo send/auto-reply until LXMF is wired) |
+| **Tools**| Identity show/regenerate, peers/paths, TCP host:port (DataStore) |
 | **Settings** | Display name, about, language note (EN/RU via system locale) |
+
+## Connect to a real TCP Reticulum interface
+
+1. Run an `rnsd` (or any Reticulum node) with a **TCP Server** interface on a host your phone can reach, e.g.:
+
+   ```
+   [[TCP Server]]
+     type = TCPServerInterface
+     enabled = yes
+     listen_ip = 0.0.0.0
+     listen_port = 4242
+   ```
+
+2. In the app **Tools** (or ensure DataStore defaults), set **TCP host** to that machine’s LAN/VPN IP (not `127.0.0.1` unless using adb reverse) and **TCP port** (default `4242`).
+3. Open **Gate** → **Connect**. A foreground notification **“RNS Gate connected”** stays while online.
+4. Identity material is stored under the app’s private files dir (`files/rns/`), not shared.
+
+For emulator testing against a host daemon:
+
+```bash
+adb reverse tcp:4242 tcp:4242
+```
+
+Then TCP host `127.0.0.1` works inside the emulator.
+
+## Permissions
+
+- `INTERNET` / `ACCESS_NETWORK_STATE` — TCP to your rnsd
+- `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` — keep node alive while connected
+- `POST_NOTIFICATIONS` — Android 13+ notification for the foreground service
 
 ## Tech
 
 - Kotlin · Jetpack Compose · Material 3 (dark theme default)
 - Min SDK 26 · Compile/Target SDK 35
-- Gradle Kotlin DSL · AGP 8.7.3 · Kotlin 2.0.21 · JDK 17
+- Chaquopy **17.0.0** · Python **3.13** (pinned to the build machine; 3.11 also supported by Chaquopy 17)
+- Pip: `rnspure` only (`rns`/`lxmf` PyPI wheels ship console-script RECORD paths Chaquopy 17 rejects; Chat still demo)
 - Package: `com.rnsgate.app`
 
-## Build (Android Studio — recommended)
-
-1. Open `/workspace/rns-gate` (or clone) in **Android Studio Ladybug+** / recent stable.
-2. Let Gradle sync (needs network once for dependencies).
-3. Run on emulator or device (API 26+).
+## Build
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-APK output: `app/build/outputs/apk/debug/app-debug.apk`
+APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-### Build notes
+Requires **JDK 17+**, Android SDK **platform 35**, and a matching **buildPython** (here `/usr/bin/python3.13`).
 
-- Requires **JDK 17+** (JDK 21 works) and Android SDK with **platform 35** + build-tools.
-- `local.properties` (`sdk.dir=...`) is gitignored; Android Studio creates it automatically.
-- On this Linux box, `./gradlew :app:assembleDebug` was verified successfully after installing cmdline-tools + `platforms;android-35`.
+## Demo fallback
 
-## Demo usage
-
-1. Open **Gate** → tap **Connect** — watch the step animation until **Online**.
-2. Open **Chat** → **New chat** → send a message — demo peer replies.
-3. **Tools** — inspect identity/peers, save TCP endpoint.
-4. **Settings** — set display name.
+If Chaquopy or `import RNS` fails at startup, `RnsGateApp` wires `DemoRnsNode` and Gate shows a status line like `demo fallback: …`. Chat remains demo in all cases for this release.
 
 ## License
 

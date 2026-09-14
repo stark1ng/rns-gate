@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.chaquo.python")
 }
 
 android {
@@ -12,11 +13,15 @@ android {
         applicationId = "com.rnsgate.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-mvp"
+        versionCode = 2
+        versionName = "0.2.0-rns"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+        ndk {
+            // Chaquopy requires explicit ABIs. 64-bit only (Python 3.13).
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
@@ -50,6 +55,21 @@ android {
     }
 }
 
+chaquopy {
+    defaultConfig {
+        // Pin to build-machine Python (3.13 on this box). Chaquopy 17 also supports 3.11.
+        version = "3.13"
+        buildPython("/usr/bin/python3.13")
+        pip {
+            // Zero-dep pure-Python Reticulum (py3-none-any wheel). Contents match `rns`.
+            // Do NOT also install PyPI `rns`/`lxmf` here: `rns` ships console-script
+            // RECORD paths (e.g. ../../bin/git-remote-rns) that Chaquopy 17 rejects.
+            // Chat remains DemoLxmfMessenger; LXMF can be vendored later with --no-deps.
+            install("rnspure")
+        }
+    }
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
@@ -74,4 +94,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-

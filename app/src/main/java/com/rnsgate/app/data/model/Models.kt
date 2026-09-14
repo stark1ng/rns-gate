@@ -22,6 +22,12 @@ enum class InterfaceKind {
     RNode
 }
 
+/** Which backend is driving the Gate. */
+enum class BackendMode {
+    Demo,
+    RealRns
+}
+
 data class InterfaceStatus(
     val kind: InterfaceKind,
     val enabled: Boolean,
@@ -73,5 +79,8 @@ data class GateSnapshot(
     val identity: IdentityInfo? = null,
     val interfaces: List<InterfaceStatus> = emptyList(),
     val uptimeMs: Long = 0L,
-    val tcpEndpoint: TcpEndpoint = TcpEndpoint.Default
+    val tcpEndpoint: TcpEndpoint = TcpEndpoint.Default,
+    val backendMode: BackendMode = BackendMode.Demo,
+    /** User-visible status / fallback reason (EN text; UI may localize prefixes). */
+    val statusMessage: String? = null
 )

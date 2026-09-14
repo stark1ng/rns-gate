@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rnsgate.app.R
+import com.rnsgate.app.data.model.BackendMode
 import com.rnsgate.app.data.model.ConnectStep
 import com.rnsgate.app.data.model.ConnectionState
 import com.rnsgate.app.data.model.InterfaceKind
@@ -88,9 +89,13 @@ fun GateScreen(vm: GateViewModel) {
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
-                text = stringResource(R.string.gate_demo_badge),
+                text = stringResource(
+                    if (snap.backendMode == BackendMode.RealRns) R.string.gate_rns_badge
+                    else R.string.gate_demo_badge
+                ),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary,
+                color = if (snap.backendMode == BackendMode.RealRns) RnsGreen
+                else MaterialTheme.colorScheme.secondary,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -145,6 +150,17 @@ fun GateScreen(vm: GateViewModel) {
             style = MaterialTheme.typography.titleMedium,
             color = statusColor
         )
+
+        val detail = snap.statusMessage
+        if (!detail.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = RnsMuted,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
 
