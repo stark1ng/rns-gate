@@ -13,6 +13,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -29,7 +30,10 @@ import com.rnsgate.app.R
 import com.rnsgate.app.ui.theme.RnsMuted
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel) {
+fun SettingsScreen(
+    vm: SettingsViewModel,
+    onOpenLogs: () -> Unit = {}
+) {
     val name by vm.displayName.collectAsStateWithLifecycle()
     val saved by vm.saved.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -70,6 +74,20 @@ fun SettingsScreen(vm: SettingsViewModel) {
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_diagnostics), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = stringResource(R.string.settings_diagnostics_note),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = RnsMuted
+                    )
+                    OutlinedButton(onClick = onOpenLogs, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.settings_open_logs))
+                    }
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = stringResource(R.string.settings_language_note),
@@ -83,7 +101,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = stringResource(R.string.settings_about_body, "0.2.0-rns"),
+                        text = stringResource(R.string.settings_about_body, "0.2.3"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = RnsMuted
                     )

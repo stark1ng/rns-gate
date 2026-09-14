@@ -13,6 +13,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.rnsgate.app.MainActivity
 import com.rnsgate.app.R
+import com.rnsgate.app.util.DiagLog
 
 /**
  * Foreground service kept alive while the Gate is connected to Reticulum.
@@ -24,11 +25,13 @@ class RnsNodeService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                DiagLog.i(TAG, "Service stop")
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             else -> {
+                DiagLog.i(TAG, "Service start (foreground)")
                 ensureChannel()
                 val notification = buildNotification()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -76,6 +79,7 @@ class RnsNodeService : Service() {
     }
 
     companion object {
+        private const val TAG = "RnsNodeService"
         const val CHANNEL_ID = "rns_gate_node"
         const val NOTIFICATION_ID = 4201
         const val ACTION_STOP = "com.rnsgate.app.action.STOP_NODE_SERVICE"

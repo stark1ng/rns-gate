@@ -26,3 +26,5 @@ app/release/
 !debug.keystore
 .cxx/
 local.properties
+__pycache__/
+*.pyc

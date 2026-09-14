@@ -59,6 +59,17 @@
     <string name="settings_language">Language</string>
     <string name="settings_language_note">Follows system language (English / Russian). Change language in Android settings.</string>
     <string name="settings_saved">Saved</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_note">In-app logs for troubleshooting. Copy and paste into chat with Grok Bot. Nothing is sent automatically.</string>
+    <string name="settings_open_logs">Open logs</string>
+
+    <string name="logs_title">Logs</string>
+    <string name="logs_back">Back</string>
+    <string name="logs_copy_all">Copy all</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_clear">Clear</string>
+    <string name="logs_copied">Logs copied</string>
+    <string name="logs_empty">No log lines yet.</string>
 
     <string name="service_channel_name">RNS node</string>
     <string name="service_channel_desc">Keeps the Reticulum node alive while connected</string>

@@ -17,6 +17,7 @@ import com.rnsgate.app.data.model.InterfaceStatus
 import com.rnsgate.app.data.model.PeerInfo
 import com.rnsgate.app.data.model.TcpEndpoint
 import com.rnsgate.app.service.RnsNodeService
+import com.rnsgate.app.util.DiagLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -87,23 +88,30 @@ class ChaquopyRnsNode(
     /** Start Python + import RNS. Returns null on success, or an error string. */
     suspend fun initializePython(): String? = withContext(Dispatchers.IO) {
         try {
+            DiagLog.i(TAG, "Python init: starting platform")
             if (!Python.isStarted()) {
                 Python.start(AndroidPlatform(appContext))
             }
             val py = Python.getInstance()
             val mod = py.getModule("rns_bridge")
             val storage = File(appContext.filesDir, "rns").absolutePath
+            DiagLog.i(TAG, "Python init: init_storage at $storage")
             val initRes = bridgeJson(mod, "init_storage", storage)
             if (!initRes.optBoolean("ok", false)) {
-                return@withContext initRes.failureMessage("init_storage")
+                val err = initRes.failureMessage("init_storage")
+                DiagLog.e(TAG, "Python init failed: $err")
+                return@withContext err
             }
             val ping = bridgeJson(mod, "ping")
             if (!ping.optBoolean("ok", false)) {
-                return@withContext ping.failureMessage("RNS ping")
+                val err = ping.failureMessage("RNS ping")
+                DiagLog.e(TAG, "Python init failed: $err")
+                return@withContext err
             }
             bridge = mod
             isPythonReady = true
             val ver = ping.jsonStr("rns_version").orEmpty()
+            DiagLog.i(TAG, "Chaquopy ready; RNS $ver")
             _snapshot.update {
                 it.copy(
                     backendMode = BackendMode.RealRns,
@@ -114,7 +122,9 @@ class ChaquopyRnsNode(
         } catch (t: Throwable) {
             isPythonReady = false
             bridge = null
-            t.message ?: t.javaClass.simpleName
+            val msg = t.message ?: t.javaClass.simpleName
+            DiagLog.e(TAG, "Python init exception: $msg")
+            msg
         }
     }
 
@@ -125,11 +135,13 @@ class ChaquopyRnsNode(
         if (_snapshot.value.connectionState != ConnectionState.Offline) return
         val mod = bridge
         if (mod == null) {
+            DiagLog.e(TAG, "Connect aborted: Python bridge not ready")
             _snapshot.update { it.copy(statusMessage = "Python bridge not ready") }
             return
         }
         connectJob?.cancel()
         connectJob = scope.launch {
+            DiagLog.i(TAG, "Connect begin")
             _snapshot.update {
                 it.copy(
                     connectionState = ConnectionState.Connecting,
@@ -145,6 +157,7 @@ class ChaquopyRnsNode(
             val ep = settingsStore.tcpEndpoint.first()
             val name = settingsStore.displayName.first()
             displayName = name
+            DiagLog.i(TAG, "TCP endpoint ${ep.host}:${ep.port}")
 
             delay(200)
             _snapshot.update { it.copy(step = ConnectStep.Interfaces) }
@@ -154,6 +167,11 @@ class ChaquopyRnsNode(
             }
             if (!startRes.optBoolean("ok", false)) {
                 val err = startRes.jsonStr("error") ?: "RNS start failed"
+                val tb = startRes.jsonStr("traceback")
+                DiagLog.e(TAG, "Bridge start error: $err")
+                if (!tb.isNullOrBlank()) {
+                    DiagLog.e(TAG, "Bridge traceback: ${tb.take(800)}")
+                }
                 _snapshot.update {
                     it.copy(
                         connectionState = ConnectionState.Offline,
@@ -166,6 +184,9 @@ class ChaquopyRnsNode(
             }
 
             val hash = startRes.jsonStr("identity_hash")
+            if (!hash.isNullOrBlank()) {
+                DiagLog.i(TAG, "Identity hash ${hash.take(16)}…")
+            }
             val identity = if (!hash.isNullOrBlank()) {
                 IdentityInfo(hashHex = hash, displayName = name)
             } else null
@@ -218,6 +239,7 @@ class ChaquopyRnsNode(
                     statusMessage = statusMsg
                 )
             }
+            DiagLog.i(TAG, "Connect online: $statusMsg")
 
             RnsNodeService.start(appContext)
             startPolling(mod)
@@ -225,15 +247,26 @@ class ChaquopyRnsNode(
     }
 
     override suspend fun disconnect() {
+        DiagLog.i(TAG, "Disconnect begin")
         connectJob?.cancel()
         connectJob = null
         pollJob?.cancel()
         pollJob = null
         val mod = bridge
         withContext(Dispatchers.IO) {
-            runCatching { if (mod != null) bridgeJson(mod, "stop") }
+            runCatching {
+                if (mod != null) {
+                    val stopRes = bridgeJson(mod, "stop")
+                    if (!stopRes.optBoolean("ok", false)) {
+                        DiagLog.w(TAG, "Bridge stop: ${stopRes.jsonStr("error")}")
+                    } else {
+                        DiagLog.i(TAG, "Bridge stop ok")
+                    }
+                }
+            }.onFailure { DiagLog.e(TAG, "Bridge stop exception: ${it.message}") }
         }
         RnsNodeService.stop(appContext)
+        DiagLog.i(TAG, "Disconnect done")
         _peers.value = emptyList()
         _snapshot.update {
             it.copy(
@@ -347,9 +380,21 @@ private fun bridgeJson(mod: PyObject, attr: String, vararg args: Any?): JSONObje
     val raw = mod.callAttr(attr, *args)
     val text = raw?.toString() ?: return JSONObject().put("ok", false).put("error", "$attr returned null")
     return try {
-        JSONObject(text)
+        val obj = JSONObject(text)
+        if (!obj.optBoolean("ok", false)) {
+            val err = obj.optString("error", "")
+            val tb = obj.optString("traceback", "")
+            if (err.isNotBlank()) {
+                DiagLog.w("ChaquopyRnsNode", "bridge $attr _err: ${err.take(400)}")
+            }
+            if (tb.isNotBlank()) {
+                DiagLog.w("ChaquopyRnsNode", "bridge $attr traceback: ${tb.take(600)}")
+            }
+        }
+        obj
     } catch (e: Exception) {
         Log.e("ChaquopyRnsNode", "$attr: not valid JSON: $text", e)
+        DiagLog.e("ChaquopyRnsNode", "$attr: invalid JSON (${e.message})")
         JSONObject()
             .put("ok", false)
             .put("error", "$attr: invalid JSON (${e.message}): ${text.take(200)}")

@@ -34,6 +34,7 @@ import com.rnsgate.app.ui.chat.ChatScreen
 import com.rnsgate.app.ui.chat.ChatViewModel
 import com.rnsgate.app.ui.gate.GateScreen
 import com.rnsgate.app.ui.gate.GateViewModel
+import com.rnsgate.app.ui.logs.LogsScreen
 import com.rnsgate.app.ui.settings.SettingsScreen
 import com.rnsgate.app.ui.settings.SettingsViewModel
 import com.rnsgate.app.ui.tools.ToolsScreen
@@ -51,6 +52,8 @@ sealed class TopDest(
     data object Settings : TopDest("settings", R.string.nav_settings, Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
+private const val ROUTE_LOGS = "logs"
+
 private val topDestinations = listOf(
     TopDest.Gate,
     TopDest.Chat,
@@ -67,31 +70,34 @@ fun RnsGateRoot(
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    val showBottomBar = currentRoute != ROUTE_LOGS
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                topDestinations.forEach { dest ->
-                    val selected = currentRoute == dest.route
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(dest.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            if (showBottomBar) {
+                NavigationBar {
+                    topDestinations.forEach { dest ->
+                        val selected = currentRoute == dest.route
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(dest.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                                contentDescription = stringResource(dest.labelRes)
-                            )
-                        },
-                        label = { Text(stringResource(dest.labelRes)) }
-                    )
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
+                                    contentDescription = stringResource(dest.labelRes)
+                                )
+                            },
+                            label = { Text(stringResource(dest.labelRes)) }
+                        )
+                    }
                 }
             }
         }
@@ -117,13 +123,22 @@ fun RnsGateRoot(
                 val vm: ToolsViewModel = viewModel(
                     factory = ToolsViewModel.factory(rnsNode)
                 )
-                ToolsScreen(vm)
+                ToolsScreen(
+                    vm = vm,
+                    onOpenLogs = { navController.navigate(ROUTE_LOGS) }
+                )
             }
             composable(TopDest.Settings.route) {
                 val vm: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.factory(settingsStore)
                 )
-                SettingsScreen(vm)
+                SettingsScreen(
+                    vm = vm,
+                    onOpenLogs = { navController.navigate(ROUTE_LOGS) }
+                )
+            }
+            composable(ROUTE_LOGS) {
+                LogsScreen(onBack = { navController.popBackStack() })
             }
         }
     }

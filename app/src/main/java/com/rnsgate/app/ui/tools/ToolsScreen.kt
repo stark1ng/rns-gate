@@ -34,7 +34,10 @@ import com.rnsgate.app.ui.theme.RnsGreen
 import com.rnsgate.app.ui.theme.RnsMuted
 
 @Composable
-fun ToolsScreen(vm: ToolsViewModel) {
+fun ToolsScreen(
+    vm: ToolsViewModel,
+    onOpenLogs: () -> Unit = {}
+) {
     val snap by vm.snapshot.collectAsStateWithLifecycle()
     val peers by vm.peers.collectAsStateWithLifecycle()
     val identity by vm.shownIdentity.collectAsStateWithLifecycle()
@@ -145,6 +148,19 @@ fun ToolsScreen(vm: ToolsViewModel) {
                     )
                     Button(onClick = vm::saveTcp, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.tools_tcp_save))
+                    }
+                }
+            }
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_diagnostics), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = stringResource(R.string.settings_diagnostics_note),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = RnsMuted
+                    )
+                    OutlinedButton(onClick = onOpenLogs, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.settings_open_logs))
                     }
                 }
             }

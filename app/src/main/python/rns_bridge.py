@@ -114,6 +114,102 @@ def _load_or_create_identity(path: str):
     return identity
 
 
+def _destination_hash(identity) -> bytes:
+    import RNS
+
+    return RNS.Destination.hash(identity, "rnsgate", "node")
+
+
+def _find_registered_destination(dest_hash: bytes):
+    """Return an already-registered IN destination with this hash, or None."""
+    try:
+        import RNS
+
+        with RNS.Transport.destinations_map_lock:
+            found = RNS.Transport.destinations_map.get(dest_hash)
+            if found is not None:
+                return found
+        with RNS.Transport.destinations_lock:
+            for d in list(RNS.Transport.destinations):
+                if getattr(d, "hash", None) == dest_hash:
+                    return d
+    except Exception:
+        pass
+    return None
+
+
+def _deregister_destination(dest) -> None:
+    if dest is None:
+        return
+    try:
+        import RNS
+
+        RNS.Transport.deregister_destination(dest)
+    except Exception:
+        pass
+
+
+def _cleanup_our_destinations(identity=None) -> None:
+    """Deregister any rnsgate/node destination still held by Transport."""
+    global _destination
+    try:
+        import RNS
+
+        targets = []
+        if _destination is not None:
+            targets.append(_destination)
+        if identity is not None:
+            h = _destination_hash(identity)
+            found = _find_registered_destination(h)
+            if found is not None and found not in targets:
+                targets.append(found)
+        # Also sweep by name aspect if Transport still holds orphans
+        try:
+            with RNS.Transport.destinations_lock:
+                for d in list(RNS.Transport.destinations):
+                    name = getattr(d, "name", "") or ""
+                    if "rnsgate" in name and "node" in name and d not in targets:
+                        targets.append(d)
+        except Exception:
+            pass
+        for d in targets:
+            _deregister_destination(d)
+    except Exception:
+        pass
+    _destination = None
+
+
+def _get_or_create_destination(identity):
+    """
+    Reuse an already-registered Destination if present (reconnect-safe),
+    otherwise create and register a new one.
+    """
+    global _destination
+    import RNS
+
+    if _destination is not None:
+        # Still registered?
+        existing = _find_registered_destination(getattr(_destination, "hash", b""))
+        if existing is _destination or existing is not None:
+            _destination = existing if existing is not None else _destination
+            return _destination
+
+    dest_hash = _destination_hash(identity)
+    existing = _find_registered_destination(dest_hash)
+    if existing is not None:
+        _destination = existing
+        return _destination
+
+    _destination = RNS.Destination(
+        identity,
+        RNS.Destination.IN,
+        RNS.Destination.SINGLE,
+        "rnsgate",
+        "node",
+    )
+    return _destination
+
+
 def init_storage(storage_dir: str) -> str:
     """Prepare directories; does not start Reticulum. Returns JSON string."""
     with _lock:
@@ -155,7 +251,7 @@ def start(host: str, port: int, display_name: str = "Operator") -> str:
             if not _state["config_dir"] or not _state["identity_path"]:
                 return _err("Call init_storage first")
 
-            if _state["running"] and _reticulum is not None:
+            if _state["running"] and _reticulum is not None and _destination is not None:
                 # Already running — refresh status only.
                 return status()
 
@@ -168,23 +264,30 @@ def start(host: str, port: int, display_name: str = "Operator") -> str:
 
             import RNS
 
-            def _log_cb(msg: str) -> None:
-                # Android Logcat via Chaquopy stdout redirection also works;
-                # keep a quiet callback sink if logdest is used.
-                pass
-
             _reticulum = RNS.Reticulum(
                 configdir=_state["config_dir"],
                 loglevel=RNS.LOG_NOTICE,
             )
             _identity = _load_or_create_identity(_state["identity_path"])
-            _destination = RNS.Destination(
-                _identity,
-                RNS.Destination.IN,
-                RNS.Destination.SINGLE,
-                "rnsgate",
-                "node",
-            )
+
+            # Reuse registered Destination if present (avoids "already registered"
+            # after Connect → Disconnect → Connect), else create fresh.
+            try:
+                _get_or_create_destination(_identity)
+            except KeyError as ke:
+                # Race / stale registration: deregister and retry once.
+                _cleanup_our_destinations(_identity)
+                try:
+                    _destination = RNS.Destination(
+                        _identity,
+                        RNS.Destination.IN,
+                        RNS.Destination.SINGLE,
+                        "rnsgate",
+                        "node",
+                    )
+                except Exception as e2:
+                    tb = traceback.format_exc(limit=4)
+                    return _err(f"start failed: destination: {e2} (after {ke})", traceback=tb)
 
             announce_ok = False
             try:
@@ -210,6 +313,11 @@ def start(host: str, port: int, display_name: str = "Operator") -> str:
             )
             return status()
         except Exception as e:
+            # Best-effort cleanup so a later start() can succeed.
+            try:
+                _cleanup_our_destinations(_identity)
+            except Exception:
+                pass
             _reticulum = None
             _identity = None
             _destination = None
@@ -219,26 +327,39 @@ def start(host: str, port: int, display_name: str = "Operator") -> str:
 
 
 def stop() -> str:
-    """Detach interfaces and clear running flag. Does not kill the Android process."""
+    """Detach interfaces, deregister destination, clear running flag."""
     global _reticulum, _identity, _destination
     with _lock:
         try:
-            if _state["running"]:
+            # Deregister first so a subsequent start() can re-create or reuse cleanly.
+            try:
+                _cleanup_our_destinations(_identity)
+            except Exception as e:
+                _state["last_error"] = f"deregister: {e}"
+
+            if _state["running"] or _reticulum is not None:
                 try:
                     import RNS
 
                     RNS.Transport.detach_interfaces()
                 except Exception as e:
                     _state["last_error"] = f"detach: {e}"
+
             _reticulum = None
             _identity = None
             _destination = None
             _state["running"] = False
             _state["started_at"] = None
             _state["announce_ok"] = False
+            _state["peer_estimate"] = 0
             _reset_reticulum_singleton()
             return _ok(running=False)
         except Exception as e:
+            # Force clear local flags even on partial failure.
+            _reticulum = None
+            _identity = None
+            _destination = None
+            _state["running"] = False
             return _err(f"stop failed: {e}")
 
 
@@ -318,6 +439,8 @@ def regenerate_identity(display_name: Optional[str] = None) -> str:
                 return _err("Call init_storage first")
             if _state["running"]:
                 return _err("Disconnect before regenerating identity")
+            # Drop any leftover destination tied to the old identity.
+            _cleanup_our_destinations(_identity)
             import RNS
 
             if os.path.isfile(path):

@@ -59,6 +59,17 @@
     <string name="settings_language">Язык</string>
     <string name="settings_language_note">Следует системному языку (английский / русский). Смените язык в настройках Android.</string>
     <string name="settings_saved">Сохранено</string>
+    <string name="settings_diagnostics">Диагностика</string>
+    <string name="settings_diagnostics_note">Внутренние логи для отладки. Скопируйте и вставьте в чат с Grok Bot. Ничего не отправляется автоматически.</string>
+    <string name="settings_open_logs">Открыть логи</string>
+
+    <string name="logs_title">Логи</string>
+    <string name="logs_back">Назад</string>
+    <string name="logs_copy_all">Копировать всё</string>
+    <string name="logs_share">Поделиться</string>
+    <string name="logs_clear">Очистить</string>
+    <string name="logs_copied">Логи скопированы</string>
+    <string name="logs_empty">Пока нет записей.</string>
 
     <string name="service_channel_name">Узел RNS</string>
     <string name="service_channel_desc">Держит узел Reticulum активным при подключении</string>

@@ -10,6 +10,7 @@ import com.rnsgate.app.data.demo.DemoLxmfMessenger
 import com.rnsgate.app.data.demo.DemoRnsNode
 import com.rnsgate.app.data.model.BackendMode
 import com.rnsgate.app.data.model.GateSnapshot
+import com.rnsgate.app.util.DiagLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,20 +45,25 @@ class RnsGateApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        DiagLog.i(TAG, "App start")
         settingsStore = SettingsStore(this)
         messenger = DemoLxmfMessenger(appScope)
 
         val chaquopy = ChaquopyRnsNode(this, appScope, settingsStore)
+        DiagLog.i(TAG, "Chaquopy init begin")
         val initError = try {
             runBlocking(Dispatchers.IO) { chaquopy.initializePython() }
         } catch (t: Throwable) {
-            t.message ?: t.javaClass.simpleName
+            val msg = t.message ?: t.javaClass.simpleName
+            DiagLog.e(TAG, "Chaquopy init exception: $msg")
+            msg
         }
 
         if (initError == null && chaquopy.isPythonReady) {
             rnsNode = chaquopy
             usingRealRns = true
             fallbackReason = null
+            DiagLog.i(TAG, "Backend mode: Real RNS")
             Log.i(TAG, "Using ChaquopyRnsNode (real RNS)")
         } else {
             val reason = initError ?: "Python/RNS not ready"
@@ -68,6 +74,7 @@ class RnsGateApp : Application() {
                 scope = appScope
             )
             usingRealRns = false
+            DiagLog.w(TAG, "Backend mode: Demo fallback — $reason")
             Log.w(TAG, "Falling back to DemoRnsNode: $reason")
         }
     }
