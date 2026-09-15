@@ -158,6 +158,14 @@ class ChaquopyRnsNode(
             val name = settingsStore.displayName.first()
             displayName = name
             DiagLog.i(TAG, "TCP endpoint ${ep.host}:${ep.port}")
+            val hostLower = ep.host.trim().lowercase()
+            if (hostLower == "127.0.0.1" || hostLower == "localhost" || hostLower == "::1") {
+                DiagLog.w(
+                    TAG,
+                    "TCP host ${ep.host} is on-device loopback; it will not reach an external reticulum. " +
+                        "Use your PC/LAN IP or a reachable rnsd host (still connecting to TCP ${ep.host}:${ep.port})."
+                )
+            }
 
             delay(200)
             _snapshot.update { it.copy(step = ConnectStep.Interfaces) }
@@ -227,7 +235,12 @@ class ChaquopyRnsNode(
             }
             delay(300)
 
+            val loopbackWarn = startRes.jsonStr("warning")
+            if (!loopbackWarn.isNullOrBlank()) {
+                DiagLog.w(TAG, loopbackWarn)
+            }
             val statusMsg = when {
+                !loopbackWarn.isNullOrBlank() -> loopbackWarn
                 startRes.optBoolean("announce_ok", false) -> "RNS online"
                 else -> startRes.jsonStr("last_error") ?: "RNS online"
             }

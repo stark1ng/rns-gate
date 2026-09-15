@@ -18,6 +18,26 @@ import time
 import traceback
 from typing import Any, Dict, Optional
 
+
+import signal as _signal_mod
+
+# Android/Chaquopy: Reticulum registers SIGINT/SIGTERM in RNS.Reticulum.__init__.
+# signal.signal only works on the main thread; Kotlin starts the bridge on
+# Dispatchers.IO. Install a safe wrapper at import time so any RNS import path
+# is covered. ValueError → no-op (handlers are optional on embedded Android).
+_orig_signal = _signal_mod.signal
+
+
+def _safe_signal(signum, handler):
+    try:
+        return _orig_signal(signum, handler)
+    except ValueError:
+        # Off main thread / embedded interpreter — ignore.
+        return _signal_mod.getsignal(signum) if hasattr(_signal_mod, "getsignal") else None
+
+
+_signal_mod.signal = _safe_signal
+
 _lock = threading.RLock()
 _state: Dict[str, Any] = {
     "storage_dir": None,
@@ -259,6 +279,15 @@ def start(host: str, port: int, display_name: str = "Operator") -> str:
             port = int(port)
             display_name = (display_name or "Operator").strip() or "Operator"
 
+            loopback_warning = None
+            host_l = host.lower()
+            if host_l in ("127.0.0.1", "localhost", "::1"):
+                loopback_warning = (
+                    f"TCP host {host} is on-device loopback; it will not reach an "
+                    "external reticulum. Use your PC/LAN IP or a reachable rnsd host "
+                    f"(still connecting to TCP {host}:{port})."
+                )
+
             _write_config(_state["config_dir"], host, port)
             _reset_reticulum_singleton()
 
@@ -311,7 +340,14 @@ def start(host: str, port: int, display_name: str = "Operator") -> str:
                     "announce_ok": announce_ok,
                 }
             )
-            return status()
+            # Soft hint only — do not overwrite a real announce/start last_error.
+            if loopback_warning and not _state.get("last_error"):
+                _state["last_error"] = loopback_warning
+            # Inject soft warning into status JSON without failing ok.
+            st = json.loads(status())
+            if loopback_warning:
+                st["warning"] = loopback_warning
+            return _dumps(st)
         except Exception as e:
             # Best-effort cleanup so a later start() can succeed.
             try:
